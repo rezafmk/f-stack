@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <arpa/inet.h>
 
 #include <rte_common.h>
 #include <rte_byteorder.h>
@@ -888,7 +889,6 @@ static int
 port_flow_isolate(uint16_t port_id, int set)
 {
     struct rte_flow_error error;
-
     /* Poisoning to make sure PMDs update it in case of error. */
     memset(&error, 0x66, sizeof(error));
     if (rte_flow_isolate(port_id, set, &error))
@@ -900,7 +900,7 @@ port_flow_isolate(uint16_t port_id, int set)
 }
 
 static int
-create_tcp_flow(uint16_t port_id, uint16_t tcp_port) {
+create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
   struct rte_flow_attr attr = {.ingress = 1};
   struct ff_port_cfg *pconf = &ff_global_cfg.dpdk.port_cfgs[port_id];
   int nb_queues = pconf->nb_lcores;
@@ -931,12 +931,20 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port) {
           },
   };
   struct rte_flow_error error;
+  struct rte_flow_item_ipv4 ipv4_spec = {
+       .hdr = { .dst_addr = rte_cpu_to_le_32(ip) }
+  };
+  struct rte_flow_item_ipv4 ipv4_mask = {
+       .hdr = { .dst_addr = 0xFFFFFFFF }
+  };
 
   memset(pattern, 0, sizeof(pattern));
   memset(action, 0, sizeof(action));
 
   /* set the dst ipv4 packet to the required value */
   pattern[0].type = RTE_FLOW_ITEM_TYPE_IPV4;
+  pattern[0].spec = &ipv4_spec;
+  pattern[0].mask = &ipv4_mask;
 
   memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
   tcp_spec.hdr.dst_port = rte_cpu_to_be_16(tcp_port);
@@ -964,7 +972,15 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port) {
   memset(pattern, 0, sizeof(pattern));
 
   /* set the dst ipv4 packet to the required value */
+  struct rte_flow_item_ipv4 ipv4_spec2 = {
+       .hdr = { .src_addr = rte_cpu_to_le_32(ip) }
+  };
+  struct rte_flow_item_ipv4 ipv4_mask2 = {
+       .hdr = { .src_addr = 0xFFFFFFFF }
+  };
   pattern[0].type = RTE_FLOW_ITEM_TYPE_IPV4;
+  pattern[0].spec = &ipv4_spec2;
+  pattern[0].mask = &ipv4_mask2;
 
   struct rte_flow_item_tcp tcp_src_mask = {
           .hdr = {
@@ -994,17 +1010,9 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port) {
 }
 
 static int
-init_flow(uint16_t port_id, uint16_t tcp_port) {
-  // struct ff_flow_cfg fcfg = ff_global_cfg.dpdk.flow_cfgs[0];
+init_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
 
-  // int i;
-  // for (i = 0; i < fcfg.nb_port; i++) {
-  //     if(!create_tcp_flow(fcfg.port_id, fcfg.tcp_ports[i])) {
-  //         return 0;
-  //     }
-  // }
-
-  if(!create_tcp_flow(port_id, tcp_port)) {
+  if(!create_tcp_flow(port_id, tcp_port, ip)) {
       rte_exit(EXIT_FAILURE, "create tcp flow failed\n");
       return -1;
   }
@@ -1013,19 +1021,33 @@ init_flow(uint16_t port_id, uint16_t tcp_port) {
   struct rte_flow_attr attr = {.ingress = 1};
   struct rte_flow_action_queue queue = {.index = 0};
 
-  struct rte_flow_item pattern_[2];
+  struct rte_flow_item pattern_[3];
   struct rte_flow_action action[2];
-  struct rte_flow_item_eth eth_type = {.type = RTE_BE16(0x0806)};
-  struct rte_flow_item_eth eth_mask = {
-          .type = RTE_BE16(0xffff)
-  };
 
   memset(pattern_, 0, sizeof(pattern_));
   memset(action, 0, sizeof(action));
+  
+  uint32_t ip_addr = rte_cpu_to_le_32(ip);
+  struct rte_flow_item_eth  item_eth_mask = {};
+    struct rte_flow_item_eth  item_eth_spec = {};
+    struct rte_flow_item_raw  raw_spec = {
+        .relative = 0,
+        .search = 0,
+        .offset = 38,
+        .limit = 0,
+        .length = 4,
+        .pattern = (uint8_t*)&ip_addr
+    };
 
-  pattern_[0].type = RTE_FLOW_ITEM_TYPE_ETH;
-  pattern_[0].spec = &eth_type;
-  pattern_[0].mask = &eth_mask;
+    item_eth_spec.hdr.ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
+    item_eth_mask.hdr.ether_type = rte_cpu_to_be_16(0xFFFF);
+
+    pattern_[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+    pattern_[0].mask = &item_eth_mask;
+    pattern_[0].spec = &item_eth_spec;
+
+    pattern_[1].type = RTE_FLOW_ITEM_TYPE_RAW;
+    pattern_[1].spec = &raw_spec;
 
   pattern_[1].type = RTE_FLOW_ITEM_TYPE_END;
 
@@ -1042,6 +1064,8 @@ init_flow(uint16_t port_id, uint16_t tcp_port) {
       if (!flow) {
           return port_flow_complain(&error);
       }
+  } else {
+    return port_flow_complain(&error);
   }
 
   return 1;
@@ -1212,11 +1236,18 @@ ff_dpdk_init(int argc, char **argv)
 
     init_clock();
 #ifdef FF_FLOW_ISOLATE
-    //Only give a example usage: port_id=0, tcp_port= 80.
-    //Recommend:
-    //1. init_flow should replace `set_rss_table` in `init_port_start` loop, This can set all NIC's port_id_list instead only 0 device(port_id).
-    //2. using config options `tcp_port` replace magic number of 80
-    ret = init_flow(0, 80);
+    uint16_t port_id = 0;
+    uint16_t network_port = 80;
+    char* ip_addr = ff_global_cfg.dpdk.port_cfgs[0].addr;
+    uint32_t ip = 0;
+    ret = inet_pton(AF_INET, ip_addr, &ip);
+    if (ret != 1) {
+        rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
+    } else {
+        printf("Creating flow for %s (%x) on port %d\n", ip_addr, ip, network_port);
+    }
+
+    ret = init_flow(port_id, network_port, ip);
     if (ret < 0) {
         rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
     }
