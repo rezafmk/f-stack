@@ -52,9 +52,15 @@ do
     fi
 done
 
-echo "./example/helloworld --conf config.ini --proc-type=primary --proc-id=0"
-        ./example/helloworld --conf config.ini --proc-type=primary --proc-id=0 &
+for((proc_id=0; proc_id<${num_procs}; ++proc_id))
+do
+    if ((proc_id == 0))
+    then
+        echo "${bin} --conf ${conf} --proc-type=primary --proc-id=${proc_id} ${others}"
+        ${bin} --conf ${conf} --proc-type=primary --proc-id=${proc_id} ${others} &
         sleep 5
-
-#echo "./example2/helloworld2 --conf config.ini --proc-type=secondary --proc-id=1"
-#        ./example2/helloworld2 --conf config.ini --proc-type=secondary --proc-id=1
+    else
+        echo "${bin} --conf ${conf} --proc-type=secondary --proc-id=${proc_id} ${others}"
+        ${bin} --conf ${conf} --proc-type=secondary --proc-id=${proc_id} ${others} &
+    fi
+done

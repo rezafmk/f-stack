@@ -38,7 +38,7 @@ char html[] =
 "<!DOCTYPE html>\r\n"
 "<html>\r\n"
 "<head>\r\n"
-"<title>Welcome to F-Stack! this is your captain</title>\r\n"
+"<title>Welcome to F-Stack!</title>\r\n"
 "<style>\r\n"
 "    body {  \r\n"
 "        width: 35em;\r\n"
@@ -122,7 +122,7 @@ int main(int argc, char * argv[])
     struct sockaddr_in my_addr;
     bzero(&my_addr, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(8000);
+    my_addr.sin_port = htons(80);
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int ret = ff_bind(sockfd, (struct linux_sockaddr *)&my_addr, sizeof(my_addr));
@@ -151,7 +151,7 @@ int main(int argc, char * argv[])
     struct sockaddr_in6 my_addr6;
     bzero(&my_addr6, sizeof(my_addr6));
     my_addr6.sin6_family = AF_INET6;
-    my_addr6.sin6_port = htons(8000);
+    my_addr6.sin6_port = htons(80);
     my_addr6.sin6_addr = in6addr_any;
 
     ret = ff_bind(sockfd6, (struct linux_sockaddr *)&my_addr6, sizeof(my_addr6));

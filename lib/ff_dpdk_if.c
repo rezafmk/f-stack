@@ -345,7 +345,6 @@ init_mem_pool(void)
 
         if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
             snprintf(s, sizeof(s), "mbuf_pool_%d", socketid);
-            printf("Creating pool of %d bufffers\n", nb_mbuf);
             pktmbuf_pool[socketid] =
                 rte_pktmbuf_pool_create(s, nb_mbuf,
                     MEMPOOL_CACHE_SIZE, 0,
@@ -1270,7 +1269,7 @@ ff_dpdk_init(int argc, char **argv)
             rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
         }
 
-        uint numQueues = 2;
+        int numQueues = ff_global_cfg.dpdk.nb_procs;
         for (int i = 0; i < numQueues; i++) {
             ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, 8000 + i, ip);
             if (ret) {

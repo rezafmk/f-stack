@@ -134,7 +134,6 @@ parse_lcore_mask(struct ff_config *cfg, const char *coremask)
         return 0;
 
     cfg->dpdk.nb_procs = count;
-    printf("Counted %d\n", count);
 
     return 1;
 }
