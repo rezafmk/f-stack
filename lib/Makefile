@@ -36,7 +36,7 @@ FF_KNI=1
 endif
 
 FF_FLOW_ISOLATE=1
-#FF_FDIR=1
+FF_FDIR=1
 
 # NETGRAPH drivers ipfw
 #FF_NETGRAPH=1
@@ -735,6 +735,7 @@ install:
 	cp -f ff_errno.h ${PREFIX_INCLUDE}/ff_errno.h
 	cp -f ff_epoll.h ${PREFIX_INCLUDE}/ff_epoll.h
 	cp -f ${TOPDIR}/start.sh ${PREFIX_BIN}/ff_start
+	cp -f libfstack.so /usr/local/lib
 	test -f '${F-STACK_CONF}' || cp -f ${TOPDIR}/config.ini ${F-STACK_CONF}
 
 uninstall:
@@ -747,4 +748,5 @@ uninstall:
 	rm -rf ${PREFIX_INCLUDE}/ff_epoll.h
 	rm -rf ${PREFIX_BIN}/ff_start
 	rm -rf ${F-STACK_CONF}
+	rm -rf /usr/local/lib/libfstack.so
 

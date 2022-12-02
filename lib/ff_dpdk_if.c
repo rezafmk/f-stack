@@ -345,6 +345,7 @@ init_mem_pool(void)
 
         if (rte_eal_process_type() == RTE_PROC_PRIMARY) {
             snprintf(s, sizeof(s), "mbuf_pool_%d", socketid);
+            printf("Creating pool of %d bufffers\n", nb_mbuf);
             pktmbuf_pool[socketid] =
                 rte_pktmbuf_pool_create(s, nb_mbuf,
                     MEMPOOL_CACHE_SIZE, 0,
@@ -1112,11 +1113,13 @@ init_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
  *   The src tcp port to match.
  * @param tcp_dport
  *   The dest tcp port to match.
+ * @param ip_addr
+ *   The ip address to match.
  *
  */
 static int
 fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir, 
-		uint16_t tcp_sport, uint16_t tcp_dport)
+		uint16_t tcp_sport, uint16_t tcp_dport, uint32_t ip_addr)
 {
     struct rte_flow_attr attr;
     struct rte_flow_item flow_pattern[4];
@@ -1125,6 +1128,9 @@ fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir,
     struct rte_flow_action_queue flow_action_queue = { .index = queue };
     struct rte_flow_item_tcp tcp_spec;
     struct rte_flow_item_tcp tcp_mask;
+    struct rte_flow_item_ipv4 ipv4_spec;
+    struct rte_flow_item_ipv4 ipv4_mask;
+
     struct rte_flow_error rfe;
     int res;
 
@@ -1147,7 +1153,17 @@ fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir,
     flow_action[1].type = RTE_FLOW_ACTION_TYPE_END;
 
     flow_pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+
+    /*
+     * set the second level of the pattern (IPV4)
+     */
+    memset(&ipv4_spec, 0, sizeof(struct rte_flow_item_ipv4));
+    memset(&ipv4_mask, 0, sizeof(struct rte_flow_item_ipv4));
+    ipv4_spec.hdr.dst_addr = rte_cpu_to_le_32(ip_addr);
+    ipv4_mask.hdr.dst_addr = 0xFFFFFFFF;
     flow_pattern[1].type = RTE_FLOW_ITEM_TYPE_IPV4;
+    flow_pattern[1].spec = &ipv4_spec;
+    flow_pattern[1].mask = &ipv4_mask;
 
     /*
      * set the third level of the pattern (TCP).
@@ -1166,7 +1182,7 @@ fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir,
 
     res = rte_flow_validate(port_id, &attr, flow_pattern, flow_action, &rfe);
     if (res)
-	return (1);
+	return port_flow_complain(&rfe);
 
     flow = rte_flow_create(port_id, &attr, flow_pattern, flow_action, &rfe);
     if (!flow) 
@@ -1236,20 +1252,31 @@ ff_dpdk_init(int argc, char **argv)
 
     init_clock();
 #ifdef FF_FLOW_ISOLATE
-    uint16_t port_id = 0;
-    uint16_t network_port = 80;
-    char* ip_addr = ff_global_cfg.dpdk.port_cfgs[0].addr;
-    uint32_t ip = 0;
-    ret = inet_pton(AF_INET, ip_addr, &ip);
-    if (ret != 1) {
-        rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
-    } else {
-        printf("Creating flow for %s (%x) on port %d\n", ip_addr, ip, network_port);
-    }
+    // run once in primary process
+    if (0 == lcore_conf.tx_queue_id[0]){
+        uint16_t port_id = 0;
+        uint16_t network_port = 80;
+        char* ip_addr = ff_global_cfg.dpdk.port_cfgs[0].addr;
+        uint32_t ip = 0;
+        ret = inet_pton(AF_INET, ip_addr, &ip);
+        if (ret != 1) {
+            rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
+        } else {
+            printf("Creating flow for %s (%x) on port %d\n", ip_addr, ip, network_port);
+        }
 
-    ret = init_flow(port_id, network_port, ip);
-    if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
+        ret = init_flow(port_id, network_port, ip);
+        if (ret < 0) {
+            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
+        }
+
+        uint numQueues = 2;
+        for (int i = 0; i < numQueues; i++) {
+            ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, 8000 + i, ip);
+            if (ret) {
+                rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", 8000 + i);
+            }
+        }
     }
 #endif
 
@@ -1257,9 +1284,9 @@ ff_dpdk_init(int argc, char **argv)
     /*
      * Refer function header section for usage.
      */
-    ret = fdir_add_tcp_flow(0, 0, FF_FLOW_INGRESS, 0, 80);
-    if (ret)
-	rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed\n");
+    //ret = fdir_add_tcp_flow(0, 0, FF_FLOW_INGRESS, 0, 80);
+    //if (ret)
+	//
 #endif
 
     return 0;
