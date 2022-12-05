@@ -25,7 +25,9 @@ int sockfd;
 int sockfd6;
 #endif
 
-char html[] = 
+char html[800];
+
+char html_template[] = 
 "HTTP/1.1 200 OK\r\n"
 "Server: F-Stack\r\n"
 "Date: Sat, 25 Feb 2017 09:26:33 GMT\r\n"
@@ -38,7 +40,7 @@ char html[] =
 "<!DOCTYPE html>\r\n"
 "<html>\r\n"
 "<head>\r\n"
-"<title>Welcome to F-Stack! this is NOT your captain</title>\r\n"
+"<title>Hello from F-Stack! This is server #%d.</title>\r\n"
 "<style>\r\n"
 "    body {  \r\n"
 "        width: 35em;\r\n"
@@ -100,7 +102,7 @@ int loop(void *arg)
             char buf[256];
             size_t readlen = ff_read(clientfd, buf, sizeof(buf));
 
-            ff_write(clientfd, html, sizeof(html) - 1);
+            ff_write(clientfd, html, strlen(html)+1);
         } else {
             printf("unknown event: %8.8X\n", event.flags);
         }
@@ -110,6 +112,11 @@ int loop(void *arg)
 int main(int argc, char * argv[])
 {
     ff_init(argc, argv);
+
+    int procId = atoi(argv[5]);
+    printf("Starting server number %d\n", procId);
+    int port = 8000 + procId;
+    snprintf(html, 800, html_template, procId);
 
     assert((kq = ff_kqueue()) > 0);
 
@@ -122,7 +129,7 @@ int main(int argc, char * argv[])
     struct sockaddr_in my_addr;
     bzero(&my_addr, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(8001);
+    my_addr.sin_port = htons(port);
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int ret = ff_bind(sockfd, (struct linux_sockaddr *)&my_addr, sizeof(my_addr));
@@ -151,7 +158,7 @@ int main(int argc, char * argv[])
     struct sockaddr_in6 my_addr6;
     bzero(&my_addr6, sizeof(my_addr6));
     my_addr6.sin6_family = AF_INET6;
-    my_addr6.sin6_port = htons(8001);
+    my_addr6.sin6_port = htons(port);
     my_addr6.sin6_addr = in6addr_any;
 
     ret = ff_bind(sockfd6, (struct linux_sockaddr *)&my_addr6, sizeof(my_addr6));

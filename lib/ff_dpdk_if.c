@@ -900,7 +900,7 @@ port_flow_isolate(uint16_t port_id, int set)
 }
 
 static int
-create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
+create_ipv4_flow(uint16_t port_id, uint32_t ip) {
   struct rte_flow_attr attr = {.ingress = 1};
   struct ff_port_cfg *pconf = &ff_global_cfg.dpdk.port_cfgs[port_id];
   int nb_queues = pconf->nb_lcores;
@@ -921,15 +921,9 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
   if (ret != 0)
     rte_exit(EXIT_FAILURE, "Error during getting device (port %u) info: %s\n", port_id, strerror(-ret));
 
-  struct rte_flow_item pattern[3];
+  struct rte_flow_item pattern[2];
   struct rte_flow_action action[2];
-  struct rte_flow_item_tcp tcp_spec;
-  struct rte_flow_item_tcp tcp_mask = {
-          .hdr = {
-                  .src_port = RTE_BE16(0x0000),
-                  .dst_port = RTE_BE16(0xffff),
-          },
-  };
+
   struct rte_flow_error error;
   struct rte_flow_item_ipv4 ipv4_spec = {
        .hdr = { .dst_addr = rte_cpu_to_le_32(ip) }
@@ -946,14 +940,8 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
   pattern[0].spec = &ipv4_spec;
   pattern[0].mask = &ipv4_mask;
 
-  memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
-  tcp_spec.hdr.dst_port = rte_cpu_to_be_16(tcp_port);
-  pattern[1].type = RTE_FLOW_ITEM_TYPE_TCP;
-  pattern[1].spec = &tcp_spec;
-  pattern[1].mask = &tcp_mask;
-
   /* end the pattern array */
-  pattern[2].type = RTE_FLOW_ITEM_TYPE_END;
+  pattern[1].type = RTE_FLOW_ITEM_TYPE_END;
 
   /* create the action */
   action[0].type = RTE_FLOW_ACTION_TYPE_RSS;
@@ -982,21 +970,8 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
   pattern[0].spec = &ipv4_spec2;
   pattern[0].mask = &ipv4_mask2;
 
-  struct rte_flow_item_tcp tcp_src_mask = {
-          .hdr = {
-                  .src_port = RTE_BE16(0xffff),
-                  .dst_port = RTE_BE16(0x0000),
-          },
-  };
-
-  memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
-  tcp_spec.hdr.src_port = rte_cpu_to_be_16(tcp_port);
-  pattern[1].type = RTE_FLOW_ITEM_TYPE_TCP;
-  pattern[1].spec = &tcp_spec;
-  pattern[1].mask = &tcp_src_mask;
-
   /* end the pattern array */
-  pattern[2].type = RTE_FLOW_ITEM_TYPE_END;
+  pattern[1].type = RTE_FLOW_ITEM_TYPE_END;
 
   /* validate and create the flow rule */
   if (!rte_flow_validate(port_id, &attr, pattern, action, &error)) {
@@ -1010,9 +985,9 @@ create_tcp_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
 }
 
 static int
-init_flow(uint16_t port_id, uint16_t tcp_port, uint32_t ip) {
+init_flow(uint16_t port_id, uint32_t ip) {
 
-  if(!create_tcp_flow(port_id, tcp_port, ip)) {
+  if(!create_ipv4_flow(port_id, ip)) {
       rte_exit(EXIT_FAILURE, "create tcp flow failed\n");
       return -1;
   }
@@ -1260,21 +1235,22 @@ ff_dpdk_init(int argc, char **argv)
         ret = inet_pton(AF_INET, ip_addr, &ip);
         if (ret != 1) {
             rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
-        } else {
-            printf("Creating flow for %s (%x) on port %d\n", ip_addr, ip, network_port);
-        }
-
-        ret = init_flow(port_id, network_port, ip);
-        if (ret < 0) {
-            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
         }
 
         int numQueues = ff_global_cfg.dpdk.nb_procs;
         for (int i = 0; i < numQueues; i++) {
-            ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, 8000 + i, ip);
+            int port = 8000 + i;
+            ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, port, ip);
             if (ret) {
-                rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", 8000 + i);
+                rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", port);
             }
+            printf("Created flow for  %s (%x) on port %d -> queue %d\n", ip_addr, ip, port, i);
+        }
+
+        printf("Creating flow for %s (%x)\n", ip_addr, ip);
+        ret = init_flow(port_id, ip);
+        if (ret < 0) {
+            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
         }
     }
 #endif
