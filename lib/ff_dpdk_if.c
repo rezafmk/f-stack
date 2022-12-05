@@ -899,7 +899,8 @@ port_flow_isolate(uint16_t port_id, int set)
     return 0;
 }
 
-static int
+// Switch extern back to static if needed again
+extern int
 create_ipv4_flow(uint16_t port_id, uint32_t ip) {
   struct rte_flow_attr attr = {.ingress = 1};
   struct ff_port_cfg *pconf = &ff_global_cfg.dpdk.port_cfgs[port_id];
@@ -986,11 +987,6 @@ create_ipv4_flow(uint16_t port_id, uint32_t ip) {
 
 static int
 init_flow(uint16_t port_id, uint32_t ip) {
-
-  if(!create_ipv4_flow(port_id, ip)) {
-      rte_exit(EXIT_FAILURE, "create tcp flow failed\n");
-      return -1;
-  }
 
   /*  ARP rule */
   struct rte_flow_attr attr = {.ingress = 1};
@@ -1237,6 +1233,12 @@ ff_dpdk_init(int argc, char **argv)
             rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
         }
 
+        printf("Creating flow for %s (%x)\n", ip_addr, ip);
+        ret = init_flow(port_id, ip);
+        if (ret < 0) {
+            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
+        }
+
         int numQueues = ff_global_cfg.dpdk.nb_procs;
         for (int i = 0; i < numQueues; i++) {
             int port = 8000 + i;
@@ -1247,11 +1249,7 @@ ff_dpdk_init(int argc, char **argv)
             printf("Created flow for  %s (%x) on port %d -> queue %d\n", ip_addr, ip, port, i);
         }
 
-        printf("Creating flow for %s (%x)\n", ip_addr, ip);
-        ret = init_flow(port_id, ip);
-        if (ret < 0) {
-            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
-        }
+        
     }
 #endif
 
