@@ -1240,16 +1240,20 @@ ff_dpdk_init(int argc, char **argv)
         }
 
         int numQueues = ff_global_cfg.dpdk.nb_procs;
+        int range = 100;
+        assert(numQueues <= 10);
         for (int i = 0; i < numQueues; i++) {
-            int port = 8000 + i;
-            ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, port, ip);
-            if (ret) {
-                rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", port);
+            int base_port = 8000 + i * 100;
+            for (int j = 0; j < range; j++) {
+                int port = base_port + j;
+                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, port, ip);
+                if (ret) {
+                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", port);
+                }
             }
-            printf("Created flow for  %s (%x) on port %d -> queue %d\n", ip_addr, ip, port, i);
-        }
-
-        
+            printf("Created flow for  %s (%x) on ports %d-%d -> queue %d\n",
+                ip_addr, ip, base_port, base_port + range - 1, i);
+        }   
     }
 #endif
 
