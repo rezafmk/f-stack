@@ -1243,16 +1243,22 @@ ff_dpdk_init(int argc, char **argv)
         int range = 100;
         assert(numQueues <= 10);
         for (int i = 0; i < numQueues; i++) {
-            int base_port = 8000 + i * 100;
+            int server_base_port = 8000 + i * 100;
+            int client_base_port = 9000 + i * 100;
             for (int j = 0; j < range; j++) {
-                int port = base_port + j;
-                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, port, ip);
+                int server_port = server_base_port + j;
+                int client_port = client_base_port + j;
+                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, server_port, ip);
                 if (ret) {
-                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", port);
+                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", server_port);
+                }
+                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, client_port, ip);
+                if (ret) {
+                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", client_port);
                 }
             }
-            printf("Created flow for  %s (%x) on ports %d-%d -> queue %d\n",
-                ip_addr, ip, base_port, base_port + range - 1, i);
+            printf("Created flows for  %s (%x) on ports %d-%d,%d-%d -> queue %d\n",
+                ip_addr, ip, server_base_port, server_base_port + range - 1, client_base_port, client_base_port + range - 1, i);
         }   
     }
 #endif
