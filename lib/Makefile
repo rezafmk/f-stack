@@ -649,27 +649,23 @@ ASM_OBJS+= $(patsubst %.S,%.o,${ASM_SRCS})
 OBJS+= $(patsubst %.c,%.o,${SRCS})
 HOST_OBJS+= $(patsubst %.c,%.o,${HOST_SRCS})
 
-all: libfstack.so
+all: libfstack.a
 
 #
 # The library is built by first incrementally linking all the object
 # to resolve internal references.  Then, all symbols are made local.
 # Then, only the symbols that are part of the  API are made
 # externally available.
-
-# Adding DPDK dependencies so libfstack.so has everything it needs in it
-LIBS=$(shell $(PKGCONF) --static --libs libdpdk)
-LIBS+= -Wl,--no-whole-archive -lrt -lm -ldl -lcrypto -pthread -lnuma
-libfstack.so: machine_includes ff_api.symlist ${MHEADERS} ${MSRCS} ${HOST_OBJS} ${ASM_OBJS} ${OBJS}
+#
+libfstack.a: machine_includes ff_api.symlist ${MHEADERS} ${MSRCS} ${HOST_OBJS} ${ASM_OBJS} ${OBJS}
 	${LD} -d -r -o $*.ro ${ASM_OBJS} ${OBJS}
 	nm $*.ro  | grep -v ' U ' | cut -d ' ' -f 3 > $*_localize_list.tmp
 	objcopy --localize-symbols=$*_localize_list.tmp $*.ro 
 	rm $*_localize_list.tmp
 	objcopy --globalize-symbols=ff_api.symlist $*.ro
 	rm -f $@
-	# In case we need the static lib
-	#ar -cqs $@ $*.ro ${HOST_OBJS}
-	${CC} -shared ${LIBS} -o libfstack.so $*.ro -fPIC ${HOST_OBJS}
+	ar -cqs $@ $*.ro ${HOST_OBJS}
+	${CC} -shared -o libfstack.so $*.ro -fPIC ${HOST_OBJS}
 	rm -f $*.ro
 
 ${HOST_OBJS}: %.o: %.c
@@ -692,7 +688,7 @@ ${OBJS}: %.o: %.c ${IMACROS_FILE}
 
 .PHONY: clean
 clean:
-	rm -f libfstack.so
+	rm -f libfstack.a
 	rm -f ${MHEADERS} ${MSRCS} ${HOST_OBJS} ${ASM_OBJS} ${OBJS} ${PROGRAM} ${IMACROS_FILE}
 	rm -rf ${MACHINE_INCLUDES_ROOT}
 
@@ -722,8 +718,8 @@ vnode_if_typedef.h:
 include ${TOPDIR}/mk/kern.mk
 
 install:
-	rm -rf ${PREFIX_LIB}/libfstack.so.${F-STACK_VERSION}
-	rm -rf ${PREFIX_LIB}/libfstack.so
+	rm -rf ${PREFIX_LIB}/libfstack.a.${F-STACK_VERSION}
+	rm -rf ${PREFIX_LIB}/libfstack.a
 	rm -rf ${PREFIX_INCLUDE}/ff_config.h
 	rm -rf ${PREFIX_INCLUDE}/ff_api.h
 	rm -rf ${PREFIX_INCLUDE}/ff_event.h
@@ -731,8 +727,8 @@ install:
 	rm -rf ${PREFIX_INCLUDE}/ff_epoll.h
 	rm -rf ${PREFIX_BIN}/ff_start
 
-	cp -f libfstack.so ${PREFIX_LIB}/libfstack.so.${F-STACK_VERSION}
-	ln -sf ${PREFIX_LIB}/libfstack.so.${F-STACK_VERSION} ${PREFIX_LIB}/libfstack.so
+	cp -f libfstack.a ${PREFIX_LIB}/libfstack.a.${F-STACK_VERSION}
+	ln -sf ${PREFIX_LIB}/libfstack.a.${F-STACK_VERSION} ${PREFIX_LIB}/libfstack.a
 	cp -f ff_config.h ${PREFIX_INCLUDE}/ff_config.h
 	cp -f ff_api.h ${PREFIX_INCLUDE}/ff_api.h
 	cp -f ff_event.h ${PREFIX_INCLUDE}/ff_event.h
@@ -743,8 +739,8 @@ install:
 	test -f '${F-STACK_CONF}' || cp -f ${TOPDIR}/config.ini ${F-STACK_CONF}
 
 uninstall:
-	rm -rf ${PREFIX_LIB}/libfstack.so.${F-STACK_VERSION}
-	rm -rf ${PREFIX_LIB}/libfstack.so
+	rm -rf ${PREFIX_LIB}/libfstack.a.${F-STACK_VERSION}
+	rm -rf ${PREFIX_LIB}/libfstack.a
 	rm -rf ${PREFIX_INCLUDE}/ff_config.h
 	rm -rf ${PREFIX_INCLUDE}/ff_api.h
 	rm -rf ${PREFIX_INCLUDE}/ff_event.h
@@ -753,4 +749,4 @@ uninstall:
 	rm -rf ${PREFIX_BIN}/ff_start
 	rm -rf ${F-STACK_CONF}
 	rm -rf /usr/local/lib/libfstack.so
-
+	
