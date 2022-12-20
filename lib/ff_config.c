@@ -747,6 +747,9 @@ dpdk_args_setup(struct ff_config *cfg)
     dpdk_argv[n++] = strdup("f-stack");
     char temp[DPDK_CONFIG_MAXLEN] = {0}, temp2[DPDK_CONFIG_MAXLEN] = {0};
 
+    dpdk_argv[n++] = strdup("--huge-dir=/tmp/mnt/huge");
+    dpdk_argv[n++] = strdup("--log-level=eal,8");
+
     if (cfg->dpdk.no_huge) {
         dpdk_argv[n++] = strdup("--no-huge");
     }

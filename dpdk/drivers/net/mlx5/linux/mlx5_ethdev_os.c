@@ -1123,7 +1123,7 @@ mlx5_sysfs_switch_info(unsigned int ifindex, struct mlx5_switch_info *info)
 
 	// for ff tools
 	if (!real_if_indextoname) {
-		real_if_indextoname = dlsym(RTLD_NEXT, "if_indextoname");
+		*(void **) (&real_if_indextoname)  = dlsym(RTLD_NEXT, "if_indextoname");
 		if (!real_if_indextoname) {
 			rte_errno = errno;
 			return -rte_errno;

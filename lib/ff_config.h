@@ -31,8 +31,8 @@
 extern "C" {
 #endif
 
-// dpdk argc, argv, max argc: 16, member of dpdk_config
-#define DPDK_CONFIG_NUM 16
+// dpdk argc, argv, max argc: 20, member of dpdk_config
+#define DPDK_CONFIG_NUM 20
 #define DPDK_CONFIG_MAXLEN 256
 #define DPDK_MAX_LCORE 128
 #define PCAP_SNAP_MINLEN 94
