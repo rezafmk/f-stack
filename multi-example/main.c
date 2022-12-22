@@ -115,7 +115,7 @@ int main(int argc, char * argv[])
 
     int procId = atoi(argv[5]);
     printf("Starting server number %d\n", procId);
-    int port = 8000 + procId;
+    int port = 80;
     snprintf(html, 800, html_template, procId);
 
     assert((kq = ff_kqueue()) > 0);

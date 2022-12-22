@@ -753,4 +753,3 @@ uninstall:
 	rm -rf ${PREFIX_BIN}/ff_start
 	rm -rf ${F-STACK_CONF}
 	rm -rf /usr/local/lib/libfstack.so
-

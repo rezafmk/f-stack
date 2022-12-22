@@ -1088,16 +1088,13 @@ init_flow(uint16_t port_id, uint32_t ip) {
  *
  */
 static int
-fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir, 
-		uint16_t tcp_sport, uint16_t tcp_dport, uint32_t ip_addr)
+fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir, uint32_t ip_addr)
 {
     struct rte_flow_attr attr;
-    struct rte_flow_item flow_pattern[4];
+    struct rte_flow_item flow_pattern[3];
     struct rte_flow_action flow_action[2];
     struct rte_flow *flow = NULL;
     struct rte_flow_action_queue flow_action_queue = { .index = queue };
-    struct rte_flow_item_tcp tcp_spec;
-    struct rte_flow_item_tcp tcp_mask;
     struct rte_flow_item_ipv4 ipv4_spec;
     struct rte_flow_item_ipv4 ipv4_mask;
 
@@ -1135,20 +1132,7 @@ fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir,
     flow_pattern[1].spec = &ipv4_spec;
     flow_pattern[1].mask = &ipv4_mask;
 
-    /*
-     * set the third level of the pattern (TCP).
-     */
-    memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
-    memset(&tcp_mask, 0, sizeof(struct rte_flow_item_tcp));
-    tcp_spec.hdr.src_port = htons(tcp_sport);
-    tcp_mask.hdr.src_port = (tcp_sport == 0 ? 0: 0xffff); 
-    tcp_spec.hdr.dst_port = htons(tcp_dport);
-    tcp_mask.hdr.dst_port = (tcp_dport == 0 ? 0: 0xffff);
-    flow_pattern[2].type = RTE_FLOW_ITEM_TYPE_TCP;
-    flow_pattern[2].spec = &tcp_spec;
-    flow_pattern[2].mask = &tcp_mask;
-
-    flow_pattern[3].type = RTE_FLOW_ITEM_TYPE_END;
+    flow_pattern[2].type = RTE_FLOW_ITEM_TYPE_END;
 
     res = rte_flow_validate(port_id, &attr, flow_pattern, flow_action, &rfe);
     if (res)
@@ -1225,41 +1209,39 @@ ff_dpdk_init(int argc, char **argv)
     // run once in primary process
     if (0 == lcore_conf.tx_queue_id[0]){
         uint16_t port_id = 0;
-        uint16_t network_port = 80;
         char* ip_addr = ff_global_cfg.dpdk.port_cfgs[0].addr;
-        uint32_t ip = 0;
-        ret = inet_pton(AF_INET, ip_addr, &ip);
-        if (ret != 1) {
-            rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
+        int num_procs = ff_global_cfg.dpdk.nb_procs;
+        int last_char = strlen(ip_addr) - 1;
+        if (num_procs > 10) {
+            rte_exit(EXIT_FAILURE, "Need to update this code to support more than 10 processes.\n");
+        } else if (ip_addr[last_char] != '0') {
+            rte_exit(EXIT_FAILURE, "IP range should start from X.X.X.0\n");
         }
-
-        printf("Creating flow for %s (%x)\n", ip_addr, ip);
-        ret = init_flow(port_id, ip);
-        if (ret < 0) {
-            rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
-        }
-
-        int numQueues = ff_global_cfg.dpdk.nb_procs;
-        int range = 100;
-        assert(numQueues <= 10);
-        for (int i = 0; i < numQueues; i++) {
-            int server_base_port = 8000 + i * 100;
-            int client_base_port = 9000 + i * 100;
-            for (int j = 0; j < range; j++) {
-                int server_port = server_base_port + j;
-                int client_port = client_base_port + j;
-                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, server_port, ip);
-                if (ret) {
-                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", server_port);
-                }
-                ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, 0, client_port, ip);
-                if (ret) {
-                    rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on port %d\n", client_port);
-                }
+        for (int i = 0; i < num_procs; i++) {
+            uint32_t ip = 0;
+            ret = inet_pton(AF_INET, ip_addr, &ip);
+            if (ret != 1) {
+                rte_exit(EXIT_FAILURE, "Error converting IP address %s\n", ip_addr);
             }
-            printf("Created flows for  %s (%x) on ports %d-%d,%d-%d -> queue %d\n",
-                ip_addr, ip, server_base_port, server_base_port + range - 1, client_base_port, client_base_port + range - 1, i);
-        }   
+
+            printf("Creating flow for %s (%x)\n", ip_addr, ip);
+            ret = init_flow(port_id, ip);
+            if (ret < 0) {
+                rte_exit(EXIT_FAILURE, "init_port_flow failed\n");
+            }
+
+            ret = fdir_add_tcp_flow(0, i, FF_FLOW_INGRESS, ip);
+            if (ret) {
+                rte_exit(EXIT_FAILURE, "fdir_add_tcp_flow failed on ip %s\n", ip_addr);
+            }
+
+            // increment ip
+            ip_addr[last_char] += 1;
+        }
+        ip_addr[last_char] -= num_procs; // reset string back to original value
+        
+        printf("Created flows for  %s to %s + %d -> queues 0-%d\n", ff_global_cfg.dpdk.port_cfgs[0].addr, ff_global_cfg.dpdk.port_cfgs[0].addr,
+            num_procs - 1, num_procs - 1); 
     }
 #endif
 
