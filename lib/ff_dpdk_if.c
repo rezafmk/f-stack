@@ -1210,7 +1210,14 @@ ff_dpdk_init(int argc, char **argv)
     if (0 == lcore_conf.tx_queue_id[0]){
         uint16_t port_id = 0;
         char* ip_addr = ff_global_cfg.dpdk.port_cfgs[0].addr;
-        for (int i = 0; i < 4; i++) {
+        int num_procs = ff_global_cfg.dpdk.nb_procs;
+        int last_char = strlen(ip_addr) - 1;
+        if (num_procs > 10) {
+            rte_exit(EXIT_FAILURE, "Need to update this code to support more than 10 processes.\n");
+        } else if (ip_addr[last_char] != '0') {
+            rte_exit(EXIT_FAILURE, "IP range should start from X.X.X.0\n");
+        }
+        for (int i = 0; i < num_procs; i++) {
             uint32_t ip = 0;
             ret = inet_pton(AF_INET, ip_addr, &ip);
             if (ret != 1) {
@@ -1229,11 +1236,12 @@ ff_dpdk_init(int argc, char **argv)
             }
 
             // increment ip
-            ip_addr[strlen(ip_addr)-1] += 1;
+            ip_addr[last_char] += 1;
         }
-        ip_addr[strlen(ip_addr)-1] -= 4;
+        ip_addr[last_char] -= num_procs; // reset string back to original value
         
-        printf("Created flows for  %s to %s + 3 -> queues 0-3\n", ff_global_cfg.dpdk.port_cfgs[0].addr, ff_global_cfg.dpdk.port_cfgs[0].addr); 
+        printf("Created flows for  %s to %s + %d -> queues 0-%d\n", ff_global_cfg.dpdk.port_cfgs[0].addr, ff_global_cfg.dpdk.port_cfgs[0].addr,
+            num_procs - 1, num_procs - 1); 
     }
 #endif
 
