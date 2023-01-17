@@ -1087,6 +1087,7 @@ init_flow(uint16_t port_id, uint32_t ip) {
  *   The ip address to match.
  *
  */
+#ifdef FF_FLOW_ISOLATE
 static int
 fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir, uint32_t ip_addr)
 {
@@ -1144,6 +1145,7 @@ fdir_add_tcp_flow(uint16_t port_id, uint16_t queue, uint16_t dir, uint32_t ip_ad
 
     return (0);
 }
+#endif
 
 #endif
 
